@@ -21,8 +21,9 @@ cd "$PROJECT_SKILLS"
 for skill in */; do
     skill_name="${skill%/}"
     echo "🔄 Syncing: $skill_name"
-    # Use robocopy on Windows (mirrors directory, /MIR = mirror, /E = copy subdirs, /NJH = no job header, /NJS = no job summary, /NFL = no file list, /NDL = no dir list
-    robocopy "$PROJECT_SKILLS/$skill_name" "$GLOBAL_SKILLS/$skill_name" /MIR /E /NJH /NJS /NFL /NDL /NP 2>/dev/null || true
+    # Remove old version and copy new
+    rm -rf "$GLOBAL_SKILLS/$skill_name"
+    cp -r "$PROJECT_SKILLS/$skill_name" "$GLOBAL_SKILLS/$skill_name"
 done
 
 # Git commit in global
