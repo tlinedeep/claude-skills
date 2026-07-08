@@ -1,115 +1,97 @@
 #!/bin/bash
-# 从上游 anthropics/skills 同步更新本地公共技能
-# 使用方式: ./sync-from-upstream.sh [--push]
-#   --push  自动推送到你的 GitHub 远程
+# 从所有上游仓库同步全部技能
+# 使用: ./sync-from-upstream.sh [--push]
 
 set -e
 
 GLOBAL_SKILLS="$HOME/.claude/skills"
-UPSTREAM_REPO="https://github.com/anthropics/skills.git"
-
-# 上游中的公共技能列表（按需增删）
-UPSTREAM_SKILLS=(
-    algorithmic-art
-    brand-guidelines
-    canvas-design
-    claude-api
-    doc-coauthoring
-    docx
-    frontend-design
-    internal-comms
-    mcp-builder
-    pdf
-    pptx
-    skill-creator
-    slack-gif-creator
-    theme-factory
-    web-artifacts-builder
-    webapp-testing
-    xlsx
-)
-
 cd "$GLOBAL_SKILLS"
 
+# ============================================================
+# 上游仓库配置 (仓库名 → 分支 → 技能列表)
+# ============================================================
+UPSTREAMS=(
+    "upstream:main:algorithmic-art,brand-guidelines,canvas-design,claude-api,doc-coauthoring,docx,frontend-design,internal-comms,mcp-builder,pdf,pptx,skill-creator,slack-gif-creator,theme-factory,web-artifacts-builder,webapp-testing,xlsx"
+    "superpowers:main:brainstorming,dispatching-parallel-agents,executing-plans,finishing-a-development-branch,receiving-code-review,requesting-code-review,subagent-driven-development,systematic-debugging,test-driven-development,using-git-worktrees,using-superpowers,verification-before-completion,writing-plans,writing-skills"
+    "ppt-master:main:ppt-master"
+    "karpathy:main:karpathy-guidelines"
+)
+
+TOTAL_UPDATED=0
+TOTAL_SKILLS=0
+
 echo "══════════════════════════════════════════"
-echo "🔄 从上游同步 Skills..."
-echo "   仓库: $UPSTREAM_REPO"
+echo "🔄 从所有上游同步 Skills..."
 echo ""
 
-# 确保 upstream 远程存在
-if ! git remote get-url upstream &>/dev/null; then
-    echo "📡 添加上游远程..."
-    git remote add upstream "$UPSTREAM_REPO"
-fi
+for entry in "${UPSTREAMS[@]}"; do
+    IFS=':' read -r remote branch skills <<< "$entry"
+    IFS=',' read -ra SKILL_LIST <<< "$skills"
 
-# 获取最新内容
-echo "📥 拉取上游更新..."
-git fetch upstream --quiet
-echo ""
+    echo "--- 上游: $remote ($branch) ---"
 
-# 比较变更
-CHANGED=0
-for skill in "${UPSTREAM_SKILLS[@]}"; do
-    # 检查上游是否存在这个技能
-    if ! git ls-tree -d upstream/main skills/$skill/ &>/dev/null; then
+    # 拉取最新
+    git fetch "$remote" "$branch" --depth=1 --quiet 2>&1 || {
+        echo "   ⚠️  拉取 $remote 失败，跳过"
         continue
-    fi
+    }
 
-    # 统计变更文件数
-    diff_count=$(git diff --name-only upstream/main -- skills/$skill/ 2>/dev/null | wc -l)
-    if [ "$diff_count" -eq 0 ]; then
-        continue
-    fi
-    CHANGED=$((CHANGED + 1))
-    echo "📦 $skill ($diff_count 个文件变更)"
-
-    # 同步文件：先删除本地该技能目录中已不存在的文件
-    while IFS= read -r local_file; do
-        upstream_path="skills/$local_file"
-        if ! git ls-tree -r upstream/main --name-only skills/$skill/ | grep -qxF "$upstream_path"; then
-            if [ -f "$local_file" ]; then
-                rm "$local_file"
-                echo "   🗑️  删除: $local_file"
-            fi
+    for skill in "${SKILL_LIST[@]}"; do
+        # 检查上游是否存在这个技能
+        if ! git ls-tree -d "$remote/$branch" "skills/$skill/" &>/dev/null 2>&1; then
+            continue
         fi
-    done < <(find "$skill" -type f 2>/dev/null)
 
-    # 从上游提取文件
-    while IFS= read -r f; do
-        local_path="${f#skills/}"  # 去掉 skills/ 前缀
-        mkdir -p "$(dirname "$local_path")" 2>/dev/null
-        git show upstream/main:"$f" > "$local_path"
-    done < <(git ls-tree -r upstream/main --name-only skills/$skill/)
+        TOTAL_SKILLS=$((TOTAL_SKILLS + 1))
+
+        # 统计变更
+        diff_count=$(git diff --name-only "$remote/$branch" -- "skills/$skill/" 2>/dev/null | wc -l)
+        if [ "$diff_count" -eq 0 ]; then
+            continue
+        fi
+
+        echo "   📦 $skill ($diff_count 个文件变更)"
+
+        # 删除上游已移除的文件
+        while IFS= read -r local_file; do
+            upstream_path="skills/$local_file"
+            if ! git ls-tree -r "$remote/$branch" --name-only "skills/$skill/" 2>/dev/null | grep -qxF "$upstream_path"; then
+                [ -f "$local_file" ] && rm "$local_file" 2>/dev/null
+            fi
+        done < <(find "$skill" -type f 2>/dev/null)
+
+        # 从上游提取所有文件 (用 archive 模式，大量文件时效率高)
+        mkdir -p "$skill"
+        git archive "$remote/$branch" "skills/$skill/" 2>/dev/null | tar xf - --strip-components=1 -C "$skill/" 2>/dev/null
+
+        TOTAL_UPDATED=$((TOTAL_UPDATED + 1))
+    done
 done
 
-if [ "$CHANGED" -eq 0 ]; then
-    echo "✅ 所有技能已是最新，无需更新"
+echo ""
+echo "══════════════════════════════════════════"
+
+if [ "$TOTAL_UPDATED" -eq 0 ]; then
+    echo "✅ 全部 $TOTAL_SKILLS 个技能已是最新"
     exit 0
 fi
 
-echo ""
-echo "══════════════════════════════════════════"
 echo "📝 提交变更..."
-
 git add -A
 if git diff --cached --quiet; then
     echo "✅ 无变更需要提交"
 else
-    git commit -m "Sync skills from upstream anthropics/skills [$(date +%Y-%m-%d)]"
+    git commit -m "Sync skills from upstreams [$(date +%Y-%m-%d)]"
     echo "✅ 提交完成"
 
-    # 如果带了 --push 参数，推送到 origin
     if [ "$1" = "--push" ]; then
-        echo ""
         echo "📤 推送到远程..."
         git push origin master
         echo "✅ 推送完成"
     else
-        echo ""
         echo "💡 提示: 使用 --push 参数自动推送到 GitHub"
-        echo "    ./sync-from-upstream.sh --push"
     fi
 fi
 
 echo ""
-echo "🎉 同步完成！"
+echo "🎉 同步完成！($TOTAL_UPDATED/$TOTAL_SKILLS 个技能已更新)"
