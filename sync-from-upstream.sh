@@ -5,7 +5,8 @@
 set -e
 
 GLOBAL_SKILLS="$HOME/.claude/skills"
-cd "$GLOBAL_SKILLS"
+# 无人值守(计划任务)场景下 $HOME 可能异常, 回退到绝对路径
+cd "$GLOBAL_SKILLS" 2>/dev/null || cd "/c/Users/Administrator/.claude/skills" 2>/dev/null || { echo "❌ 无法定位 skills 目录"; exit 1; }
 
 # ============================================================
 # 上游仓库配置 (仓库名 → 分支 → 技能列表)
