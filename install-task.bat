@@ -1,8 +1,9 @@
 @echo off
 REM 创建计划任务：每周一自动同步 Skills 上游更新
 REM 请以管理员身份运行此脚本
+REM 从同目录的 Sync-Skills-Upstream.xml 导入配置
 
-schtasks /create /tn "Sync-Skills-Upstream" /tr "'C:\Program Files\Git\bin\bash.exe' -c 'cd /c/Users/Administrator/.claude/skills && bash sync-from-upstream.sh --push'" /sc weekly /d MON /st 09:00 /f
+schtasks /create /tn "Sync-Skills-Upstream" /xml "%~dp0Sync-Skills-Upstream.xml" /f
 
 if %errorlevel% equ 0 (
     echo [OK] 计划任务 'Sync-Skills-Upstream' 已创建
