@@ -44,25 +44,26 @@ for entry in "${UPSTREAMS[@]}"; do
 
         TOTAL_SKILLS=$((TOTAL_SKILLS + 1))
 
-        # 统计变更
-        diff_count=$(git diff --name-only "$remote/$branch" -- "skills/$skill/" 2>/dev/null | wc -l)
+        # 统计变更 (对比上游 skills/<skill>/ 与本地 HEAD 的 <skill>/, 两者路径前缀不同不能直接 diff 工作区)
+        diff_count=$(git diff --name-only "$remote/$branch:skills/$skill/" "HEAD:$skill/" 2>/dev/null | wc -l)
         if [ "$diff_count" -eq 0 ]; then
             continue
         fi
 
         echo "   📦 $skill ($diff_count 个文件变更)"
 
-        # 删除上游已移除的文件
-        while IFS= read -r local_file; do
-            upstream_path="skills/$local_file"
-            if ! git ls-tree -r "$remote/$branch" --name-only "skills/$skill/" 2>/dev/null | grep -qxF "$upstream_path"; then
-                [ -f "$local_file" ] && rm "$local_file" 2>/dev/null
-            fi
-        done < <(find "$skill" -type f 2>/dev/null)
+        # 删除上游已移除的文件 (一次性列出两边文件清单求差集, 避免对每个文件启动子进程)
+        upstream_list=$(mktemp)
+        local_list=$(mktemp)
+        git ls-tree -r "$remote/$branch" --name-only "skills/$skill/" 2>/dev/null | sed 's|^skills/||' | sort -u > "$upstream_list"
+        find "$skill" -type f 2>/dev/null | sed 's|^\./||' | sort -u > "$local_list"
+        comm -23 "$local_list" "$upstream_list" | tr '\n' '\0' | xargs -0 -r rm -f
+        rm -f "$upstream_list" "$local_list"
 
         # 从上游提取所有文件 (用 archive 模式，大量文件时效率高)
+        # git archive 输出的是仓库相对路径 skills/<skill>/<file>, 需 --strip-components=2 才能落在 <skill>/ 顶层
         mkdir -p "$skill"
-        git archive "$remote/$branch" "skills/$skill/" 2>/dev/null | tar xf - --strip-components=1 -C "$skill/" 2>/dev/null
+        git archive "$remote/$branch" "skills/$skill/" 2>/dev/null | tar xf - --strip-components=2 -C "$skill/" 2>/dev/null
 
         TOTAL_UPDATED=$((TOTAL_UPDATED + 1))
     done

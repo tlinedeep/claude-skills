@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-# Import animation module (optional)
-try:
-    from pptx_animations import create_transition_xml, TRANSITIONS
-    ANIMATIONS_AVAILABLE = True
-except ImportError:
-    ANIMATIONS_AVAILABLE = False
-    TRANSITIONS = {}
+from pptx_transitions import create_transition_xml
 
 
 def create_slide_xml_with_svg(
@@ -21,6 +15,7 @@ def create_slide_xml_with_svg(
     transition_duration: float = 0.5,
     auto_advance: float | None = None,
     use_compat_mode: bool = True,
+    transition_effect_options: dict[str, object] | None = None,
 ) -> str:
     """Create slide XML containing an SVG image.
 
@@ -31,17 +26,22 @@ def create_slide_xml_with_svg(
         width_emu: Width in EMU.
         height_emu: Height in EMU.
         transition: Transition effect name.
+        transition_effect_options: PowerPoint Effect Options for the selected
+            native transition.
         transition_duration: Transition duration in seconds.
         auto_advance: Auto-advance interval in seconds.
         use_compat_mode: Whether to use compatibility mode (PNG + SVG dual format).
     """
     transition_xml = ''
-    if transition and ANIMATIONS_AVAILABLE:
-        transition_xml = '\n' + create_transition_xml(
+    if transition is not None or auto_advance is not None:
+        transition_fragment = create_transition_xml(
             effect=transition,
             duration=transition_duration,
             advance_after=auto_advance,
+            effect_options=transition_effect_options,
         )
+        if transition_fragment:
+            transition_xml = '\n' + transition_fragment
 
     if use_compat_mode:
         blip_xml = f'''<a:blip r:embed="{png_rid}">
@@ -111,6 +111,7 @@ def create_slide_rels_xml(
     svg_rid: str,
     svg_filename: str,
     use_compat_mode: bool = True,
+    slide_layout_target: str = "../slideLayouts/slideLayout1.xml",
 ) -> str:
     """Create slide relationship file XML.
 
@@ -120,17 +121,18 @@ def create_slide_rels_xml(
         svg_rid: SVG relationship ID.
         svg_filename: SVG filename.
         use_compat_mode: Whether to use compatibility mode.
+        slide_layout_target: Target for the slide's actual layout part.
     """
     if use_compat_mode:
         return f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="{slide_layout_target}"/>
   <Relationship Id="{png_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{png_filename}"/>
   <Relationship Id="{svg_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{svg_filename}"/>
 </Relationships>'''
     else:
         return f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="{slide_layout_target}"/>
   <Relationship Id="{svg_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{svg_filename}"/>
 </Relationships>'''
