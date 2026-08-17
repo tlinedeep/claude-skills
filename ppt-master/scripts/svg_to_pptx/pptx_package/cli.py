@@ -70,7 +70,12 @@ from ..drawingml.theme_fonts import (
     load_theme_font_spec,
 )
 from ..drawingml.utils import unsafe_exported_font_faces
-from .narration import NARRATION_EXTENSIONS, find_narration_files, probe_audio_duration
+from .narration import (
+    DEFAULT_NARRATION_START_FLOOR,
+    NARRATION_EXTENSIONS,
+    find_narration_files,
+    probe_audio_duration,
+)
 from .template_structure import (
     TemplateStructureError,
     load_pptx_structure_lock,
@@ -870,9 +875,10 @@ Recorded narration:
     - Keeps speaker notes when enabled
     - Prepares PowerPoint recorded timings and narrations
     - Requires one m4a/mp3/wav file per slide
-    - Uses narration_animations.json when animation sidecars exist
-    - Inherits source-bound deck motion from the base postflight report
-    - Use --animation-config animations.json for the canonical animation
+    - Unless --no-animations is set, recorded narration without an explicit
+      config selects narration_animations.json when either sidecar exists
+    - With no sidecar, --inherit-motion-from may restore base-report deck motion
+    - Use --animation-config animations.json for narration-independent custom motion
     - Use --no-animations for narration and timings without animation motion
     - Embeds per-slide audio matched by SVG filename / slide number
     - Sets slide auto-advance from audio duration so video export can use
@@ -1059,9 +1065,11 @@ Recorded narration:
         type=str,
         default=None,
         help=(
-            'Per-slide/per-object animation config. Recorded narration uses '
-            '<project>/narration_animations.json when an animation sidecar exists, '
-            'or may inherit base postflight motion with --inherit-motion-from. '
+            'Per-slide/per-object animation config. While motion remains enabled, '
+            'recorded narration without an explicit config selects '
+            '<project>/narration_animations.json when either animation sidecar '
+            'exists, or may inherit base postflight motion with '
+            '--inherit-motion-from when neither exists. '
             'Other exports default to <project>/animations.json when present.'
         ),
     )
@@ -1096,6 +1104,16 @@ Recorded narration:
                              '(<project>_<ts>_narrated.pptx) to tell them apart from silent exports.')
     parser.add_argument('--narration-padding', type=non_negative_float, default=0.5,
                         help='Seconds to add after each narration before auto-advance (default: 0.5)')
+    parser.add_argument(
+        '--narration-start-floor',
+        type=non_negative_float,
+        default=DEFAULT_NARRATION_START_FLOOR,
+        help=(
+            'Minimum seconds from slide-transition start to narration start; '
+            'set 0 to start immediately after the transition '
+            f'(default: {DEFAULT_NARRATION_START_FLOOR})'
+        ),
+    )
     parser.add_argument(
         '--inherit-motion-from',
         type=str,
@@ -1284,8 +1302,8 @@ Recorded narration:
         )
         return 1
 
-    # Native DrawingML is the only PPTX product. ``-s`` remains an explicit
-    # diagnostic source override; standard export always reads svg_output/.
+    # Native DrawingML is the only PPTX product. A non-output ``-s`` remains a
+    # diagnostic source override; default and explicit output use release rules.
     native_source = args.source or 'output'
     native_files, native_source_dir = find_svg_files(
         project_path,
@@ -1311,19 +1329,27 @@ Recorded narration:
             print("Error: No SVG files found", file=sys.stderr)
         return 1
 
-    if args.quick_generate:
+    release_quality_gate = args.quick_generate or args.source in {None, 'output'}
+    if release_quality_gate:
         source_fingerprint = _svg_source_fingerprint(native_files)
         quality = _quality_report_context(project_path, source_fingerprint)
         quality_gate, _ = _quality_gate_status(quality)
         if quality_gate != 'passed':
-            print(
-                "Error: --quick-generate requires a passing final SVG quality "
-                f"report for the current svg_output/; found {quality_gate}.",
-                file=sys.stderr,
+            export_mode = (
+                '--quick-generate'
+                if args.quick_generate
+                else 'default release export'
             )
             print(
+                f"Error: {export_mode} requires a passing final SVG quality "
+                f"report for the current {native_source_dir}/; found "
+                f"{quality_gate}.",
+                file=sys.stderr,
+            )
+            quick_flag = ' --quick-generate' if args.quick_generate else ''
+            print(
                 "Run: python3 skills/ppt-master/scripts/svg_quality_checker.py "
-                f'"{project_path}" --quick-generate --stage final --json',
+                f'"{project_path}"{quick_flag} --stage final --json',
                 file=sys.stderr,
             )
             return 1
@@ -1698,6 +1724,22 @@ Recorded narration:
                 "transition auto_advance",
                 allow_zero=True,
             )
+        transition_sound = (
+            None
+            if args.no_animations
+            else (
+                inherited_transition['sound']
+                if 'sound' in inherited_transition
+                else transition_defaults.get('sound')
+            )
+        )
+        if transition_sound is not None and not isinstance(
+            transition_sound,
+            str,
+        ):
+            raise ValueError(
+                'transition sound must be a project-relative .wav path or null'
+            )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -1790,6 +1832,7 @@ Recorded narration:
             args.auto_advance is not None
             or inherited_overrides.get('auto_advance') is True
         ),
+        'transition_sound': 'sound' in inherited_transition,
         'animation': (
             args.animation is not None
             or inherited_overrides.get('animation') is True
@@ -1814,6 +1857,7 @@ Recorded narration:
             'effect_options': transition_effect_options,
             'duration': transition_duration,
             'auto_advance': auto_advance,
+            'sound': transition_sound,
         },
         'animation': {
             'effect': normalized_animation or 'none',
@@ -1877,6 +1921,7 @@ Recorded narration:
         verbose=verbose,
         transition=transition,
         transition_effect_options=transition_effect_options,
+        transition_sound=transition_sound,
         transition_duration=transition_duration,
         auto_advance=auto_advance,
         notes=notes,
@@ -1891,6 +1936,7 @@ Recorded narration:
         narration_audio=narration_audio,
         use_narration_timings=use_narration_timings,
         narration_padding=args.narration_padding,
+        narration_start_floor=args.narration_start_floor,
         text_flow=args.text_flow,
         image_optimize=not args.no_image_optimize,
         image_max_dimension=args.image_max_dimension,

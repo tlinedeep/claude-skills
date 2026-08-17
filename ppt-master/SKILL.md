@@ -1,12 +1,15 @@
 ---
 name: ppt-master
 description: >
-  AI-driven presentation workflow for generating editable PPTX decks, creating
-  reusable Brand/Layout/Deck workspaces, filling native PPTX templates, and
-  enhancing finished PPTX files. Use when the user asks to create, regenerate,
-  template, fill, or enhance a presentation, or mentions ppt-master.
+  AI-driven presentation workflow for generating editable PPTX decks and slides,
+  reconstructing page visuals, creating reusable Brand/Style/Layout/Deck
+  workspaces, filling native PPTX templates, and enhancing finished PPTX files.
+  Use when the user asks to create, generate, reconstruct, regenerate, beautify,
+  redesign, template, fill, or enhance a presentation, PPT, PPTX, slide deck, or
+  courseware — including adding narration or animation to one — requests a
+  presentation-authored narrated/self-running video, or mentions ppt-master.
 metadata:
-  version: "4.3.0"
+  version: "4.8.0"
   copyright: "Copyright (c) 2025-2026 Hugo He"
   license: "MIT"
   official_repository: "https://github.com/hugohe3/ppt-master"
@@ -26,17 +29,26 @@ PPT Master is a routed presentation workflow. This entry owns global execution d
    non-zero result stops the Skill immediately; do not inspect, repair, or
    bypass the integrity gate.
 3. Read [`workflows/routing.md`](workflows/routing.md).
-4. Select exactly one top-level route from the routing authority.
-5. Read only that route's authority and its explicitly triggered supporting documents.
+4. Select exactly one top-level route and its active profile from the routing
+   authority.
+5. Read only the resulting runtime authority and its explicitly triggered
+   supporting documents.
 
-| Selected route | Runtime authority |
+| Selected route / profile | Runtime authority |
 |---|---|
-| Generate PPTX | [`workflows/generate-pptx.md`](workflows/generate-pptx.md) |
+| Generate PPTX — Image to PPTX | [`workflows/profiles/image-to-pptx.md`](workflows/profiles/image-to-pptx.md); Codex-supported, always Quick |
+| Generate PPTX — Beautify | [`workflows/profiles/beautify-pptx.md`](workflows/profiles/beautify-pptx.md); explicit Quick intent selects Quick, otherwise Default |
+| Generate PPTX — ordinary Default | [`workflows/generate-pptx.md`](workflows/generate-pptx.md) |
+| Generate PPTX — ordinary explicit Quick | [`workflows/profiles/quick-generate.md`](workflows/profiles/quick-generate.md) |
 | Create Template | [`workflows/create-template.md`](workflows/create-template.md) |
 | Fill Native PPTX | [`workflows/template-fill-pptx.md`](workflows/template-fill-pptx.md) |
 | Enhance Native PPTX | [`workflows/native-enhance-pptx.md`](workflows/native-enhance-pptx.md) |
 
-**Hard rule — selected authority only**: Do not load another top-level route's procedure after routing. Profiles, stages, governance files, and child workflows refine the selected route; they never compete with it.
+**Hard rule — selected authority only**: Do not load another top-level route's
+procedure after routing. Image to PPTX and Beautify are mutually exclusive;
+Image to PPTX activates Quick, while Beautify selects from explicit Quick
+intent. Never load both runtimes. Supporting documents refine one route; they
+never compete with it.
 
 ---
 
@@ -49,6 +61,7 @@ PPT Master is a routed presentation workflow. This entry owns global execution d
 5. **No speculative execution** — Do not prepare later-phase artifacts before their owning step.
 6. **Deterministic routing** — Do not add a route-choice question when [`routing.md`](workflows/routing.md) resolves the request. If a route prerequisite is missing, state it and stop that route.
 7. **Owning-source recovery** — On failure, repair or regenerate the owning source artifact and resume from the route's declared pointer. Do not silently downgrade a required artifact.
+8. **Stable paths** — Use absolute skill/project paths; never derive them from CWD. The Skill root is the directory containing `SKILL.md`; the host supplies its path. If it cannot be determined, ask the user — never guess it via file search.
 
 ## Global Communication Rules
 
