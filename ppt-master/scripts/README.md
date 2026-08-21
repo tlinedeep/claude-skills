@@ -55,7 +55,7 @@ python3 scripts/update_repo.py
 | SVG pipeline | `preset_shape_svg.py`, `shape_boolean_svg.py`, `svg_authoring_view.py`, `compact_svg_coordinates.py`, `mirror_template_materialize.py`, `finalize_svg.py`, `svg_to_pptx.py`, `template_preview_pptx.py`, `total_md_split.py`, `svg_quality_checker.py`, `extract_svg_assets.py`, `extract_svg_pictures.py`, `animation_config.py`, `notes_to_audio.py`, `narration_sync.py` | [docs/svg-pipeline.md](./docs/svg-pipeline.md); [native shape authoring](../references/native-shape-authoring.md) |
 | PPTX transitions | `pptx_transitions.py` | [docs/pptx-transitions.md](./docs/pptx-transitions.md) |
 | PPTX animations | `pptx_animations.py`, `animation_config.py` | [docs/pptx-animations.md](./docs/pptx-animations.md) |
-| Animation resources | `sound_sync.py` | [sound catalog](../templates/sounds/README.md); [docs/pptx-animations.md](./docs/pptx-animations.md) |
+| Animation resources | `sound_sync.py` | [sound vocabulary and sync](../templates/sounds/README.md); [docs/pptx-animations.md](./docs/pptx-animations.md) |
 | Spec maintenance | `update_spec.py`, `visualization_recall.py`; legacy `chart_recall.py` | [docs/update_spec.md](./docs/update_spec.md); [docs/visualization-recall.md](./docs/visualization-recall.md) |
 | Image tools | `image_gen.py`, `image_treat.py`, `analyze_images.py`, `gemini_watermark_remover.py` | [docs/image.md](./docs/image.md) |
 | Maintenance smokes | Inline temporary-project commands | [advanced image and motion](./docs/advanced-image-motion-smoke.md); [mask and gradient](./docs/mask-gradient-smoke.md); [multilingual text](./docs/multilingual-text-smoke.md) |
@@ -98,7 +98,7 @@ deprecated compatibility no-op. `--record-usage` writes one derived snapshot
 under `analysis/page-context/`; exact `o200k_base` token counts are optional and
 degrade to `tokens: null` when `tiktoken` is absent. Telemetry may be partial.
 
-Visualization candidate recall:
+Optional visualization-recall diagnostics and canonical validation:
 
 ```bash
 python3 scripts/visualization_recall.py recall --page P03 --tag "time series" --tag "three metrics" --tag "direction over time"
@@ -194,22 +194,48 @@ python3 scripts/native_enhance_pptx.py apply <project_path>
 python3 scripts/pptx_delivery_check.py <finished.pptx>
 ```
 
-Native preset shape authoring (one registry-backed fragment on stdout):
+Native preset shape authoring (one or more registry-backed fragments on stdout):
 
 ```bash
 python3 scripts/preset_shape_svg.py list --search arrow
-python3 scripts/preset_shape_svg.py describe rightArrow
+python3 scripts/preset_shape_svg.py describe rightArrow --compact
 python3 scripts/preset_shape_svg.py render rightArrow --id process-arrow --frame 120 180 240 96 --fill '#2563EB'
+python3 scripts/preset_shape_svg.py render-batch --input - <<'JSON'
+[
+  {"preset":"chevron","id":"step-1","frame":[120,180,220,96],
+   "fill":"#2563EB","stroke":"none","adjustments":{"adj":"val 42000"}},
+  {"preset":"leftBrace","id":"group-brace","frame":[380,170,48,240],"fill":"none","stroke":"#111827","stroke_width":3}
+]
+JSON
 ```
+
+Runtime capability discovery reads
+[`preset-shape-vocabulary.md`](../references/preset-shape-vocabulary.md), which
+lists all 187 exact names by Office category and objective contour family.
+`list [--search QUERY]` and `list --grouped [--search QUERY]` remain optional
+location views; they do not replace the complete vocabulary.
+`describe --compact` returns the selected preset's objective identity, Office
+category, family, scope, literal boundary, adjustments, connector/path facts,
+connection sites, and text-rectangle availability. Plain `describe` preserves
+the full nested semantics payload. A zero-match `list --search` remains
+a failed lookup with exit code 1.
 
 The helper never writes a page or project file. Select one exact semantic
 stock-shape match, inspect the emitted fragment, and insert it into the
-hand-authored SVG with the normal patch workflow. Its project-authored output
-is one compact atomic `<g>` with direct registry-generated visible paths. When
-one effect is justified, optional `--filter-id softShadow` references one
-existing direct page-level filter under the shared shadow/glow contract and
-applies it once to a shape preset. Connector presets do not accept that option.
-The helper does not create the filter definition.
+hand-authored SVG with the normal patch workflow. Semantic discovery does not
+force ordinary rectangles, ellipses, or lines through `render`; use the
+simplest exact authoring form from the native-shape reference. A rendered
+project-owned preset is one compact atomic `<g>` with direct registry-generated
+visible paths. When one effect is justified, optional `--filter-id softShadow`
+references one existing direct page-level filter under the shared shadow/glow
+contract and applies it once to a shape preset. Connector presets do not accept
+that option. The helper does not create the filter definition. `render-batch`
+accepts a non-empty JSON array using the snake_case forms of the single-render
+options; it validates every item and duplicate id before printing, so one
+invalid item produces no partial fragment output. The batch remains
+fragment-only input for one current construction, not a page generator or
+project manifest. `adjustments` is a JSON object keyed by guide name, unlike
+the repeatable single-render `--adjust NAME=FORMULA` option.
 Quality check and export rerender the registry instead of relying on a hidden
 carrier, preview wrapper, or stored preview fingerprint. PPTX import and
 round-trip SVGs deliberately keep their expanded carrier/preview evidence and
