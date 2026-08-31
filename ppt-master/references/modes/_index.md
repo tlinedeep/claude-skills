@@ -58,18 +58,6 @@ selecting one for the current deck:
 
 ---
 
-## 4. Escape hatch — `custom`
+## 4. Editable projection and escape hatch — `custom`
 
-`custom` holds **any bespoke narrative direction the five don't give as-is** — and what *kind* of thing it is doesn't matter. It might be a nameable cadence (dialectic 正反合, myth-vs-reality, countdown / Top-N, Socratic), a deliberate multi-act fusion of several modes, or the user's own feel for how the deck should carry (confrontational here, detached there). Don't try to taxonomize it.
-
-**Default candidates**: All three coordinated Stage-2 directions use literal `custom` plus a visible, non-empty `mode_behavior`. A direction may specialize one preset, fuse several modes, or define a novel cadence; it fits any installed template capacity. The fixed five remain lower-level single-select alternatives. Strategist crystallizes the confirmed current value in the Design Spec first, then projects its behavior and actual catalog basis to `spec_lock.md`.
-
-**Quick custom**: do not display a candidate set. Use `custom` only when a project-specific specialization or fusion serves the deck better than one preset; retain the behavior and exact bases in active context and persist nothing.
-
-**Mandatory — select before detail reading**: Use this index to freeze every catalog source actually used, then read only those exact files before writing the behavior. A custom may use zero, one, or many sources: keep one when it owns the whole specialized cadence, or include every mode that owns a distinct executable act, posture, title voice, rhythm, or register. Reference count has no fixed cap; count is an outcome, not a target. A three-basis direction may use `pyramid` for a conclusion-first opening, `narrative` for the risk-tension act, and `instructional` for the closing action sequence; it reads those three files and writes all three ids beside `mode_behavior`. Quick retains its bases only in active context. Omit every source whose contribution cannot be stated, never add a second merely to imply synthesis, and do not open candidates for comparison after this gate. A genuinely new cadence names and reads no catalog source.
-
-> **One value per deck — fusion is *one* `custom`, not several modes.** A deck always resolves a single `mode`. A multi-mode blend is expressed as **one** custom behavior whose paragraph describes the acts — never as several simultaneous modes.
->
-> **Custom need not mean fusion.** A Default recommendation can specialize one dominant preset for this project's act sequence, title voice, rhythm, and register. Quick or a lower-level manual choice may still use the fixed preset directly.
-
-**Forbidden — empty customization**: Do not relabel an index row as `custom`. The behavior must state the project-specific cadence, posture, title voice, page rhythm, or act sequence that the fixed preset alone does not encode. A user-stated direction remains authoritative the same way a user-supplied outline is — see the lens-not-mandate note in §1.
+`custom` is the editable behavior carrier: one deck resolves a single `mode`, and a multi-mode blend is one custom behavior whose paragraph states the executable cadence, not several modes. A custom may use catalog material in any way or none — carrying one preset unchanged is valid — and names only the bases it actually uses; freeze those ids from this index, then read only their files before writing the behavior. Default authors it for each Stage-2 direction under [`strategist.md`](../strategist.md) §d; Quick uses it only when a project-specific specialization or fusion serves the deck better than one preset and keeps the behavior in active context.

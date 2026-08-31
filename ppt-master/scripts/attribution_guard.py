@@ -17,6 +17,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import argparse
 import ast
 import hashlib
 import re
@@ -45,10 +46,6 @@ _REQUIRED_GATE_FILES = (
     "scripts/svg_quality/cli.py",
     "scripts/svg_to_pptx.py",
     "scripts/svg_to_pptx/pptx_package/cli.py",
-    "scripts/template_fill_pptx.py",
-    "scripts/template_fill_pptx/cli.py",
-    "scripts/native_enhance_pptx.py",
-    "scripts/native_enhance_pptx_core.py",
     "scripts/register_template.py",
     "scripts/template_preview_pptx.py",
 )
@@ -208,8 +205,16 @@ def require_skill_integrity() -> None:
     raise SystemExit(78)
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the zero-argument integrity-check CLI parser."""
+    return argparse.ArgumentParser(
+        description="Validate the PPT Master Skill attribution and execution gates.",
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
     """Run the fail-closed Skill integrity gate."""
+    build_parser().parse_args(argv)
     require_skill_integrity()
     return 0
 
