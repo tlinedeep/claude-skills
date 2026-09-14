@@ -16,6 +16,7 @@ UPSTREAMS=(
     "superpowers:main:brainstorming,dispatching-parallel-agents,executing-plans,finishing-a-development-branch,receiving-code-review,requesting-code-review,subagent-driven-development,systematic-debugging,test-driven-development,using-git-worktrees,using-superpowers,verification-before-completion,writing-plans,writing-skills"
     "ppt-master:main:ppt-master"
     "karpathy:main:karpathy-guidelines"
+    "text-to-cad:main:cad,cad-viewer,step-parts,dxf,urdf,srdf,sdf,sendcutsend,dfam-check,gcode,bambu-labs"
 )
 
 TOTAL_UPDATED=0
@@ -46,12 +47,16 @@ for entry in "${UPSTREAMS[@]}"; do
         TOTAL_SKILLS=$((TOTAL_SKILLS + 1))
 
         # 统计变更 (对比上游 skills/<skill>/ 与本地 HEAD 的 <skill>/, 两者路径前缀不同不能直接 diff 工作区)
-        diff_count=$(git diff --name-only "$remote/$branch:skills/$skill/" "HEAD:$skill/" 2>/dev/null | wc -l)
-        if [ "$diff_count" -eq 0 ]; then
-            continue
+        # 本地还没有这个技能时 HEAD:$skill 不存在, git diff 会报错并返回 0, 会被误判成"无变更"而跳过, 所以单独判断
+        if git cat-file -e "HEAD:$skill" 2>/dev/null; then
+            diff_count=$(git diff --name-only "$remote/$branch:skills/$skill/" "HEAD:$skill/" 2>/dev/null | wc -l)
+            if [ "$diff_count" -eq 0 ]; then
+                continue
+            fi
+            echo "   📦 $skill ($diff_count 个文件变更)"
+        else
+            echo "   📦 $skill (新增技能)"
         fi
-
-        echo "   📦 $skill ($diff_count 个文件变更)"
 
         # 删除上游已移除的文件 (一次性列出两边文件清单求差集, 避免对每个文件启动子进程)
         upstream_list=$(mktemp)

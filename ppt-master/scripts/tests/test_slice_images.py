@@ -29,6 +29,31 @@ SCRIPT = SCRIPTS_DIR / "slice_images.py"
 
 
 class SliceImagesDiagnosticsTests(unittest.TestCase):
+    def test_pure_key_despill_keeps_opaque_key_hue_foreground_and_recovers_shadow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet_path = root / "sheet.png"
+            key = (0, 255, 0)
+            malachite = (63, 143, 108)
+            image = Image.new("RGB", (240, 100), key)
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((20, 20, 100, 80), fill=malachite)
+            # A black shadow composited over the key at 50% alpha.
+            draw.rectangle((140, 20, 220, 80), fill=(0, 128, 0))
+            image.save(sheet_path)
+
+            written = slice_sheet(
+                sheet_path, 1, 1, root / "out",
+                names=["element"], alpha=True, bg=key, tolerance=18,
+            )
+            element = Image.open(written[0]).convert("RGBA")
+
+            self.assertEqual(element.getpixel((60, 50)), malachite + (255,))
+            shadow_r, shadow_g, shadow_b, shadow_a = element.getpixel((180, 50))
+            self.assertLessEqual(max(shadow_r, shadow_g, shadow_b), 8)
+            self.assertTrue(120 <= shadow_a <= 136, shadow_a)
+            self.assertEqual(element.getpixel((120, 50))[3], 0)
+
     def test_sheet_orientation_is_applied_before_slicing(self) -> None:
         for orientation, expected_size in ((6, (40, 80)), (None, (80, 40))):
             with self.subTest(orientation=orientation), tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +129,150 @@ class SliceImagesDiagnosticsTests(unittest.TestCase):
             self.assertIn("key spread 3", result.stderr)
             self.assertIn("--bg #57B265 --tolerance 12", result.stderr)
             self.assertFalse((output_dir / "element.png").exists())
+
+    def test_strict_alpha_names_edge_wide_near_key_noise_as_key_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet_path = root / "sheet.png"
+            output_dir = root / "output"
+            # A slightly off, noisy key (as a JPEG round-trip leaves it) with
+            # one element well clear of every cell edge.
+            image = Image.new("RGB", (120, 120), (2, 253, 2))
+            px = image.load()
+            for y in range(120):
+                for x in range(120):
+                    if (x * 7 + y * 13) % 5 == 0:
+                        px[x, y] = (6, 240, 8)
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((40, 40, 80, 80), fill=(170, 40, 55))
+            image.save(sheet_path)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(sheet_path),
+                    "--grid", "1x1",
+                    "--names", "element",
+                    "--trim",
+                    "--alpha",
+                    "--strict-alpha",
+                    "--bg", "#00FF00",
+                    "--tolerance", "12",
+                    "--output", str(output_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("this is key noise", result.stderr)
+            self.assertNotIn("content reaches the", result.stderr)
+            self.assertIn("Suggested rerun:", result.stderr)
+            self.assertFalse((output_dir / "element.png").exists())
+
+    def test_inset_accepts_horizontal_and_vertical_fractions(self) -> None:
+        from slice_images import parse_inset
+
+        self.assertEqual(parse_inset("0.03"), (0.03, 0.03))
+        self.assertEqual(parse_inset("0.01,0.03"), (0.01, 0.03))
+        with self.assertRaises(ValueError):
+            parse_inset("0.5")
+        with self.assertRaises(ValueError):
+            parse_inset("0.1,0.2,0.3")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet_path = root / "sheet.png"
+            output_dir = root / "output"
+            # Two wide bands with a white grid line between them: an
+            # isotropic inset wide enough for the line would cut the glyphs.
+            image = Image.new("RGB", (400, 100), (0, 0, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((0, 48, 399, 51), fill=(255, 255, 255))
+            draw.rectangle((10, 8, 390, 40), fill=(240, 240, 240))
+            draw.rectangle((10, 58, 390, 92), fill=(240, 240, 240))
+            image.save(sheet_path)
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), str(sheet_path),
+                    "--grid", "2x1", "--names", "a,b",
+                    "--trim", "--alpha", "--strict-alpha",
+                    "--bg", "#0000FF", "--inset", "0,0.06",
+                    "--output", str(output_dir),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Image.open(output_dir / "a.png").size, (381, 33))
+            self.assertEqual(Image.open(output_dir / "b.png").size, (381, 35))
+
+    def test_strict_alpha_rejects_a_sheet_whose_ground_recovers_as_haze(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet_path = root / "sheet.png"
+            output_dir = root / "output"
+            # The real ground (#034AF4) sits farther from pure blue than the
+            # tolerance, so soft-alpha recovery turns the whole field into a
+            # faint half-foreground; the outer gutter alone does not catch it.
+            image = Image.new("RGB", (160, 120), (3, 74, 244))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((60, 40, 100, 80), fill=(250, 250, 250))
+            image.save(sheet_path)
+
+            args = [
+                sys.executable, str(SCRIPT), str(sheet_path),
+                "--grid", "1x1", "--names", "mark",
+                "--trim", "--alpha", "--strict-alpha",
+                "--output", str(output_dir),
+            ]
+            result = subprocess.run(
+                args + ["--bg", "#0000FF", "--tolerance", "62"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("semi-transparent", result.stderr)
+            self.assertIn("measured ground colour", result.stderr)
+            self.assertFalse((output_dir / "mark.png").exists())
+
+            result = subprocess.run(
+                args + ["--bg", "#034AF4", "--tolerance", "62"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Image.open(output_dir / "mark.png").size, (41, 41))
+
+    def test_strict_alpha_names_painted_card_cells_instead_of_a_key_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sheet_path = root / "sheet.png"
+            output_dir = root / "output"
+            # The model painted each cell as a dark card and left the key only
+            # as thin grid lines: after --inset the cells are all panel.
+            image = Image.new("RGB", (200, 100), (0, 0, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((3, 3, 96, 96), fill=(12, 14, 30))
+            draw.rectangle((103, 3, 196, 96), fill=(12, 14, 30))
+            draw.rectangle((30, 30, 60, 60), fill=(240, 200, 120))
+            draw.rectangle((130, 30, 160, 60), fill=(240, 200, 120))
+            image.save(sheet_path)
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), str(sheet_path),
+                    "--grid", "1x2", "--names", "a,b",
+                    "--trim", "--alpha", "--strict-alpha",
+                    "--bg", "#0000FF", "--inset", "0.05",
+                    "--output", str(output_dir),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("painted backing panel", result.stderr)
+            self.assertIn("Cells painted as panels", result.stderr)
+            self.assertNotIn("Suggested rerun:", result.stderr)
 
 
 class ImageOrientationProcessingTests(unittest.TestCase):
