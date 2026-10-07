@@ -1,6 +1,7 @@
 ---
 name: dxf
-description: Generate, regenerate, and validate 2D DXF drawings from Python build123d sources. Use for DXF files, `.py` drawing scripts, @dxf models, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry.
+description: Generate, regenerate, and validate 2D DXF drawings from Python build123d sources. Use for DXF files, `.py` drawing scripts, @dxf models, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Open and visually review existing DXF files in CAD Viewer.
+license: MIT
 ---
 
 # DXF generation and validation
@@ -11,12 +12,18 @@ repository link is only for provenance and release review.
 
 ## Setup
 
-This skill's commands are thin entrypoints over the `cadgen` distribution, which
-carries the Python build runtime and the JavaScript it executes. Install it once:
+Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
+one installation, and its warm build daemon, with the CAD app's server:
 
-```bash
-python -m pip install -r requirements.txt
-```
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.15 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.15 python`
+
+The first run downloads that installation and the first snapshot its headless
+browser; later runs reuse both.
+
+`cadgen doctor <skill-dir>` reports the installation in use and checks that it is
+the one this skill pins, and that the CAD kernel loads; use it for installation or
+kernel load errors.
 
 Drawings are build123d geometry, so a drawing build loads the CAD kernel like a
 STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs).
@@ -121,10 +128,9 @@ Copy the full template for the applicable workflow from
    (`from bracket import THICKNESS`) are tracked by value the same way.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
-   read it with `cadgen.read_step`, not `build123d.import_step`. It records the
-   file's content hash as a build INPUT, so replacing the vendor STEP makes the
-   drawing stale on its own, with no `--force`; read it through build123d and the
-   drawing stays "current" against a file that changed underneath it.
+   read it with `cadgen.read_step` (warm from the store, the same geometry as
+   `build123d.import_step`). Like every file a build reads, it is an input:
+   replacing the vendor STEP makes the drawing stale on its own, with no `--force`.
 
    ```python
    from pathlib import Path
@@ -277,7 +283,7 @@ is rendered; a job's `output.renderScale` and `output.transparent` still apply.
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
 directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;
-review geometry visually with `$cad-viewer`.
+review geometry visually (see [Show the model](#show-the-model)).
 
 ## Workflow
 
@@ -293,16 +299,29 @@ python path/to/source.py --force
 
 5. Validate the generated DXF deterministically, then hand off and report.
 
-## Viewer integration
+## Show the model
 
-The CAD Viewer catalogs `.dxf` files only (artifacts, never scripts) and is a static
-visualization tool: it draws the `.dxf` that exists on disk — a straight 2D render of
-the sheet, with no 3D view — and never runs a script. A drawing with no `.dxf` yet
-simply does not appear until its script has been run; regenerating after edits is
-likewise the script's job. A DXF pane has no tools, no toolbar and no sidebar: a
-drawing is a finished 2D document, so the pane pans, zooms and fits, and nothing else.
-There is no in-viewer export. An imported `.dxf` renders directly with no artifact
-management.
+Show the user each file you create or change, and any they ask to see. Snapshots and
+validation don't replace this.
+
+- If your tools include `cad_show` (your host may prefix it), use it with the file's
+  absolute path, and follow its description for when to call it again. `cad_view` reads
+  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
+  of your own work.
+- Otherwise run the CAD Viewer, from any folder:
+
+  ```bash
+  cadgen viewer --host 127.0.0.1 --json --detach
+  ```
+
+  `--detach` returns once the viewer answers requests and leaves it running in the
+  background: always pass it, since a foreground viewer never exits (and piping its
+  output through `tail` can hide the URL for good). It starts this machine's one viewer,
+  or reuses it. Read `url` from its one JSON line (never guess the port), and for each
+  file return `url?file=<its URL-encoded absolute path>`. If it fails to launch, say so.
+
+The viewer renders saved DXF files as read-only 2D drawings; it never runs
+generation scripts. Drag to pan, wheel/pinch to zoom, double-click to fit.
 
 ## Validation
 
@@ -342,10 +361,8 @@ Report only checks that actually ran.
 
 ## Handoff
 
-After creating or modifying DXF drawings, you must ALWAYS hand the explicit `.dxf`
-file path(s) to `$cad-viewer` when that skill is installed and include its live
-viewer link(s) in the final response. If `$cad-viewer` is unavailable or startup fails, report
-that and rely on `ezdxf` checks instead of silently omitting the handoff.
+Show every drawing you created or changed ([Show the model](#show-the-model)).
+Report any failure explicitly.
 
 Final responses should include generated files, returned viewer links, validation
 actually run, and assumptions.
